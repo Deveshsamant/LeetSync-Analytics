@@ -136,6 +136,21 @@ function rateCell(part, whole, label) {
   cell.appendChild(wrap);
   return cell;
 }
+/**
+ * Who a row belongs to: the name they typed for themselves if they gave one,
+ * otherwise the random install id. The full id is always the tooltip, so a
+ * named row can still be matched back to its install.
+ */
+function whoCell(row, label) {
+  const cell = el('td');
+  if (label) cell.dataset.label = label;
+  cell.title = row.install_id;
+  const name = row.display_name;
+  cell.appendChild(el('span', name ? 'id-link' : 'id-link mono',
+    name || shortId(row.install_id)));
+  return cell;
+}
+
 function emptyRow(body, span, text) {
   const tr = el('tr');
   const cell = el('td', 'empty', text);
@@ -513,7 +528,7 @@ function countUp(su) {
 
 const PANELS = [
   ['Submission verdicts', '', 'statuses', (r) => r.status, (r) => r.n, (r) => VERDICT_TONE[r.status] || 'warn'],
-  ['Theme in use', 'installs', 'themes', (r) => (r.theme === 'light' ? 'Modernist' : 'Signal'), (r) => r.installs, (r) => (r.theme === 'light' ? 'ok' : 'bad')],
+  ['Themes used', 'installs', 'themes', (r) => (r.theme === 'light' ? 'Modernist' : 'Signal'), (r) => r.installs, (r) => (r.theme === 'light' ? 'ok' : 'bad')],
   ['Feature usage', '', 'events', (r) => r.event, (r) => r.n, null],
   ['Languages', '', 'languages', (r) => r.language, (r) => r.n, null],
   ['Pushes by difficulty', '', 'difficulty', (r) => r.difficulty, (r) => r.n, (r) => LEVEL_TONE[r.difficulty]],
@@ -669,10 +684,8 @@ function renderUsers(data) {
     const tr = el('tr', 'row-link');
     tr.tabIndex = 0;
 
-    const idCell = el('td', 'mono');
+    const idCell = whoCell(u);
     idCell.dataset.span = '1';
-    idCell.title = u.install_id;
-    idCell.appendChild(el('span', 'id-link', shortId(u.install_id)));
 
     const themeName = u.theme === 'light' ? 'Modernist' : u.theme === 'dark' ? 'Signal' : '—';
 
@@ -730,10 +743,8 @@ function renderActivity(data) {
     const when = el('td', 'mono soft', fmtWhen(row.ts));
     when.dataset.span = '1';
 
-    const idCell = el('td', 'mono row-link');
-    idCell.dataset.label = 'Install';
-    idCell.title = row.install_id;
-    idCell.appendChild(el('span', 'id-link', shortId(row.install_id)));
+    const idCell = whoCell(row, 'User');
+    idCell.classList.add('row-link');
     idCell.addEventListener('click', () => openUser(row.install_id));
 
     tr.append(
@@ -811,6 +822,8 @@ async function openUser(installId) {
 
   body.innerHTML = '';
   const p = data.profile;
+  // The heading opened as the raw id; use the person's name now we have it.
+  if (p.display_name) $('drawerTitle').textContent = p.display_name;
 
   body.appendChild(drawerTiles([
     [fmt(p.submissions), 'Submissions'],
@@ -822,6 +835,8 @@ async function openUser(installId) {
   body.appendChild(el('h3', null, 'Profile'));
   const kv = el('div', 'kv');
   for (const [k, v] of [
+    ['Name', p.display_name || 'anonymous'],
+    ['Install', $('drawerId').textContent],
     ['Version', dash(p.version)], ['First seen', fmtWhen(p.first_seen)],
     ['Last seen', fmtWhen(p.last_seen)], ['Events', fmt(p.events)],
   ]) {
@@ -947,10 +962,8 @@ async function openDay(date) {
     data.installs,
     (row) => {
       const tr = el('tr', 'row-link');
-      const idCell = el('td', 'mono');
+      const idCell = whoCell(row);
       idCell.dataset.span = '1';
-      idCell.title = row.install_id;
-      idCell.appendChild(el('span', 'id-link', shortId(row.install_id)));
       tr.append(
         idCell,
         td(fmt(row.events), 'num', 'Events'),
