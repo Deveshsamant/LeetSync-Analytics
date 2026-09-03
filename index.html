@@ -6,145 +6,88 @@
   <meta name="robots" content="noindex, nofollow">
   <title>LeetSync — Analytics</title>
   <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
 
-  <!-- Key gate. The Worker rejects every read without it, so this is the
-       actual protection, not just a UI screen. -->
+  <!-- ═══ KEY GATE ═══
+       The Worker rejects every read without the key, so this is the actual
+       protection, not just a screen. The canvas behind it is the same 3D
+       stage the overview uses, seeded with a spiral of towers. -->
   <div class="gate" id="gate">
+    <canvas class="gate-canvas" id="gateCanvas"></canvas>
     <form class="gate-card" id="gateForm">
       <img class="gate-logo" src="logo.png" alt="" width="52" height="52">
-      <h1>LeetSync Analytics</h1>
-      <p class="gate-desc">Enter the dashboard key. It stays in this browser and
-        is sent only to your own Worker.</p>
+      <h1>LeetSync<br>Analytics</h1>
+      <p>Enter the dashboard key. It stays in this browser and is sent only to
+        your own Worker.</p>
       <input type="password" id="keyInput" placeholder="dashboard key"
              autocomplete="off" spellcheck="false" required>
-      <button class="btn btn-primary" type="submit" id="gateBtn">Unlock</button>
+      <button class="gate-submit" type="submit" id="gateBtn">Unlock</button>
       <div class="gate-error" id="gateError"></div>
+      <div class="gate-rule"></div>
+      <p style="font-size:11.5px">Every figure on this dashboard comes from your
+        own Worker. There is no sample mode — an empty database reads as empty.</p>
     </form>
   </div>
 
   <div class="app" id="app" hidden>
     <header class="head">
       <div class="brand">
-        <img class="brand-logo" src="logo.png" alt="LeetSync" width="28" height="28">
-        <div>
-          <h1>LeetSync</h1>
+        <img class="brand-logo" src="logo.png" alt="LeetSync" width="30" height="30">
+        <div class="brand-text">
+          <span class="brand-name">LeetSync</span>
           <span class="brand-sub">Analytics</span>
         </div>
       </div>
 
-      <nav class="views" id="views" role="tablist" aria-label="Dashboard views">
-        <button class="chip active" role="tab" aria-selected="true" data-view="overview">Overview</button>
-        <button class="chip" role="tab" aria-selected="false" data-view="days">Days</button>
-        <button class="chip" role="tab" aria-selected="false" data-view="users">Users</button>
-        <button class="chip" role="tab" aria-selected="false" data-view="activity">Activity</button>
-      </nav>
+      <nav class="topnav" id="views" role="tablist" aria-label="Dashboard views"></nav>
 
       <div class="head-right">
-        <div class="ranges" id="ranges">
-          <button class="chip" data-days="7">7d</button>
-          <button class="chip active" data-days="30">30d</button>
-          <button class="chip" data-days="90">90d</button>
-          <button class="chip" data-days="365">1y</button>
-        </div>
-        <button class="chip" id="refreshBtn">Refresh</button>
-        <button class="chip" id="themeBtn" title="Switch theme" aria-label="Switch theme">◐</button>
-        <button class="chip" id="lockBtn" title="Forget the key">Lock</button>
+        <div class="seg" id="ranges"></div>
+        <button class="btn3d" type="button" id="refreshBtn" title="Reload this view">
+          <span class="btn-dot"></span><span id="refreshLabel">Refresh</span>
+        </button>
+        <button class="btn3d square" type="button" id="themeBtn" aria-label="Switch theme" title="Switch theme">◐</button>
+        <button class="btn3d" type="button" id="lockBtn">Lock</button>
       </div>
     </header>
 
-    <!-- ══ Overview ══ -->
+    <!-- ═══ OVERVIEW ═══ -->
     <section class="view" id="view-overview">
-      <div class="tiles">
-        <div class="tile">
-          <div class="tile-value" id="tInstalls">—</div>
-          <div class="tile-label">Active installs</div>
-        </div>
-        <div class="tile">
-          <div class="tile-value" id="tSubs">—</div>
-          <div class="tile-label">Submissions</div>
-        </div>
-        <div class="tile">
-          <div class="tile-value" id="tAccept">—</div>
-          <div class="tile-label">Acceptance rate</div>
-        </div>
-        <div class="tile">
-          <div class="tile-value" id="tPushes">—</div>
-          <div class="tile-label">Solutions pushed</div>
-        </div>
-        <div class="tile">
-          <div class="tile-value" id="tProblems">—</div>
-          <div class="tile-label">Distinct problems</div>
-        </div>
-        <div class="tile">
-          <div class="tile-value" id="tFailures">—</div>
-          <div class="tile-label">Failed pushes</div>
+      <div class="hero">
+        <div class="hero-left">
+          <div class="page-head">
+            <h1 class="page-title">Overview</h1>
+            <span class="page-note" id="rangeNote"></span>
+          </div>
+          <div class="tiles" id="tiles"></div>
         </div>
       </div>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Activity</h2>
+      <section class="section">
+        <div class="section-head">
+          <h2 class="h-label">Events per day</h2>
           <div class="legend">
             <span class="key key-ev">Events</span>
             <span class="key key-ac">Accepted</span>
-            <span class="panel-note" id="activityNote"></span>
+            <span class="note" id="activityNote"></span>
           </div>
         </div>
-        <div id="activityChart" class="chart"></div>
+        <div id="activityChart"></div>
       </section>
 
-      <div class="grid">
-        <section class="panel">
-          <div class="panel-head"><h2>Submission verdicts</h2></div>
-          <div id="statusChart" class="bars"></div>
-        </section>
+      <div class="grid" id="barPanels"></div>
 
-        <section class="panel">
-          <div class="panel-head"><h2>Theme in use</h2></div>
-          <div id="themeChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Feature usage</h2></div>
-          <div id="eventsChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Languages</h2></div>
-          <div id="languagesChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Pushes by difficulty</h2></div>
-          <div id="difficultyChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Version adoption</h2></div>
-          <div id="versionsChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Push failures</h2></div>
-          <div id="failuresChart" class="bars"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head"><h2>Sheets opened</h2></div>
-          <div id="sheetsChart" class="bars"></div>
-        </section>
-      </div>
-
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Accepted solutions by difficulty</h2>
-          <span class="panel-note">Averages</span>
+      <section class="section">
+        <div class="section-head">
+          <h2 class="h-label">Accepted solutions by difficulty</h2>
+          <span class="note">Averages</span>
         </div>
-        <div class="table-wrap">
-          <table class="table">
+        <div class="tbl-wrap">
+          <table class="tbl cardtable">
             <thead>
               <tr><th>Difficulty</th><th class="num">Accepted</th><th class="num">Avg runtime</th>
                   <th class="num">Avg memory</th><th class="num">Avg code size</th></tr>
@@ -154,17 +97,17 @@
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Most-attempted problems</h2>
-          <span class="panel-note">Top 50</span>
+      <section class="section" style="border-bottom:0;padding-bottom:30px">
+        <div class="section-head">
+          <h2 class="h-label">Most-attempted problems</h2>
+          <span class="note">Top 50</span>
         </div>
-        <div class="table-wrap">
-          <table class="table">
+        <div class="tbl-wrap">
+          <table class="tbl cardtable">
             <thead>
               <tr><th>#</th><th>Problem</th><th>Level</th><th class="num">Attempts</th>
                   <th class="num">Accepted</th><th>Rate</th><th class="num">Pushes</th>
-                  <th class="num">Users</th><th></th></tr>
+                  <th class="num">Users</th></tr>
             </thead>
             <tbody id="problemsBody"></tbody>
           </table>
@@ -172,102 +115,98 @@
       </section>
     </section>
 
-    <!-- ══ Days ══ -->
-    <section class="view" id="view-days" hidden>
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Day by day</h2>
-          <span class="panel-note" id="daysNote"></span>
-        </div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr><th>Day</th><th></th><th class="num">Installs</th><th class="num">Events</th>
-                  <th class="num">Subs</th><th class="num">Accepted</th><th>Rate</th>
-                  <th class="num">Pushes</th><th class="num">Failed</th>
-                  <th class="num">Problems</th></tr>
-            </thead>
-            <tbody id="daysBody"></tbody>
-          </table>
-        </div>
-      </section>
+    <!-- ═══ DAYS ═══ -->
+    <section class="view pad" id="view-days" style="padding-top:26px;padding-bottom:26px" hidden>
+      <div class="page-head">
+        <h1 class="page-title">Day by day</h1>
+        <span class="page-note" id="daysNote"></span>
+      </div>
+      <div class="tbl-box">
+        <table class="tbl cardtable">
+          <thead>
+            <tr><th>Day</th><th></th><th class="num">Installs</th><th class="num">Events</th>
+                <th class="num">Subs</th><th class="num">Accepted</th><th>Rate</th>
+                <th class="num">Pushes</th><th class="num">Failed</th><th class="num">Problems</th></tr>
+          </thead>
+          <tbody id="daysBody"></tbody>
+        </table>
+      </div>
     </section>
 
-    <!-- ══ Users ══ -->
-    <section class="view" id="view-users" hidden>
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Installs</h2>
-          <span class="panel-note" id="usersNote"></span>
-        </div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr><th>Install</th><th>Theme</th><th>Version</th><th class="num">Subs</th>
-                  <th class="num">Accepted</th><th>Rate</th><th class="num">Pushes</th>
-                  <th class="num">Problems</th><th class="num">Code</th>
-                  <th>First seen</th><th>Last seen</th></tr>
-            </thead>
-            <tbody id="usersBody"></tbody>
-          </table>
-        </div>
-      </section>
+    <!-- ═══ USERS ═══ -->
+    <section class="view pad" id="view-users" style="padding-top:26px;padding-bottom:26px" hidden>
+      <div class="page-head">
+        <h1 class="page-title">Installs</h1>
+        <span class="page-note" id="usersNote"></span>
+      </div>
+      <div class="tbl-box">
+        <table class="tbl cardtable">
+          <thead>
+            <tr><th>Install</th><th>Theme</th><th>Version</th><th class="num">Subs</th>
+                <th class="num">Accepted</th><th>Rate</th><th class="num">Pushes</th>
+                <th class="num">Problems</th><th class="num">Code</th>
+                <th>First seen</th><th>Last seen</th></tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
     </section>
 
-    <!-- ══ Activity ══ -->
-    <section class="view" id="view-activity" hidden>
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Every event</h2>
-          <span class="panel-note" id="feedNote"></span>
-        </div>
-        <div class="filters" id="feedFilters"></div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr><th>When</th><th>Install</th><th>Event</th><th>Problem</th>
-                  <th>Verdict</th><th>Language</th><th class="num">Runtime</th>
-                  <th class="num">Memory</th><th>Detail</th></tr>
-            </thead>
-            <tbody id="feedBody"></tbody>
-          </table>
-        </div>
-      </section>
+    <!-- ═══ ACTIVITY ═══ -->
+    <section class="view pad" id="view-activity" style="padding-top:26px;padding-bottom:26px" hidden>
+      <div class="page-head">
+        <h1 class="page-title">Every event</h1>
+        <span class="page-note" id="feedNote"></span>
+      </div>
+      <div class="filters" id="feedFilters"></div>
+      <div class="tbl-box">
+        <table class="tbl cardtable">
+          <thead>
+            <tr><th>When</th><th>Install</th><th>Event</th><th>Problem</th><th>Verdict</th>
+                <th>Language</th><th class="num">Runtime</th><th class="num">Memory</th><th>Detail</th></tr>
+          </thead>
+          <tbody id="feedBody"></tbody>
+        </table>
+      </div>
     </section>
 
     <footer class="foot">
       <span id="footNote"></span>
       <span>LeetSync · <a href="https://deveshsamant.in" target="_blank" rel="noopener noreferrer">deveshsamant.in</a></span>
     </footer>
+
+    <nav class="tabbar" id="tabbar" role="tablist" aria-label="Dashboard views"></nav>
   </div>
 
-  <!-- Per-install drawer, opened from the Users table -->
-  <div class="drawer-wrap" id="drawer" hidden>
-    <div class="drawer-scrim" id="drawerScrim"></div>
+  <!-- ═══ PER-INSTALL / PER-DAY DRAWER ═══ -->
+  <div class="layer" id="drawer" hidden>
+    <div class="scrim" id="drawerScrim"></div>
     <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
       <div class="drawer-head">
         <div>
           <h2 id="drawerTitle">Install</h2>
           <span class="drawer-id" id="drawerId"></span>
         </div>
-        <button class="chip" id="drawerClose" aria-label="Close">✕</button>
+        <button class="btn3d square" type="button" id="drawerClose" aria-label="Close"
+                style="width:32px;height:32px;font-size:13px">✕</button>
       </div>
       <div class="drawer-body" id="drawerBody"></div>
     </aside>
   </div>
 
-  <!-- Code viewer -->
-  <div class="drawer-wrap" id="codeModal" hidden>
-    <div class="drawer-scrim" id="codeScrim"></div>
+  <!-- ═══ CODE VIEWER ═══ -->
+  <div class="code-layer" id="codeModal" hidden>
+    <div class="scrim" id="codeScrim"></div>
     <aside class="code-card" role="dialog" aria-modal="true" aria-labelledby="codeTitle">
       <div class="drawer-head">
         <div>
           <h2 id="codeTitle">Solution</h2>
           <span class="drawer-id" id="codeMeta"></span>
         </div>
-        <div class="code-actions">
-          <button class="chip" id="codeCopy">Copy</button>
-          <button class="chip" id="codeClose" aria-label="Close">✕</button>
+        <div style="display:flex;gap:8px;flex:none">
+          <button class="btn3d" type="button" id="codeCopy">Copy</button>
+          <button class="btn3d square" type="button" id="codeClose" aria-label="Close"
+                  style="width:31px;height:31px;font-size:13px">✕</button>
         </div>
       </div>
       <pre class="code-body" id="codeBody"></pre>
