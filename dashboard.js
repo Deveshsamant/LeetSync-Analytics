@@ -528,7 +528,7 @@ function countUp(su) {
 
 const PANELS = [
   ['Submission verdicts', '', 'statuses', (r) => r.status, (r) => r.n, (r) => VERDICT_TONE[r.status] || 'warn'],
-  ['Themes used', 'installs', 'themes', (r) => (r.theme === 'light' ? 'Modernist' : 'Signal'), (r) => r.installs, (r) => (r.theme === 'light' ? 'ok' : 'bad')],
+  ['Theme in use', 'installs', 'themes', (r) => (r.theme === 'light' ? 'Modernist' : 'Signal'), (r) => r.installs, (r) => (r.theme === 'light' ? 'ok' : 'bad')],
   ['Feature usage', '', 'events', (r) => r.event, (r) => r.n, null],
   ['Languages', '', 'languages', (r) => r.language, (r) => r.n, null],
   ['Pushes by difficulty', '', 'difficulty', (r) => r.difficulty, (r) => r.n, (r) => LEVEL_TONE[r.difficulty]],
