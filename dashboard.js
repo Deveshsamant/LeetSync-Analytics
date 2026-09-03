@@ -97,6 +97,48 @@ const VERDICT_TONE = {
 };
 const LEVEL_TONE = { Easy: 'ok', Medium: 'warn', Hard: 'bad' };
 const DIFF_ORDER = { Easy: 0, Medium: 1, Hard: 2, Unknown: 3 };
+
+const FUNNEL_STAGES = [
+  ['reached_install', 'Installed'],
+  ['reached_repo', 'Repo set up'],
+  ['reached_submit', 'Submitted'],
+  ['reached_push', 'Pushed'],
+];
+
+/** Where people stop. Each stage also carries its share of the first one. */
+function funnelChart(funnel) {
+  const rows = FUNNEL_STAGES.map(([key, label]) => ({ label, n: (funnel || {})[key] || 0 }));
+  const top = rows[0].n;
+  bars('funnelChart', rows, {
+    label: (r) => (top ? `${r.label} · ${pctText(r.n, top)}` : r.label),
+    value: (r) => r.n,
+    tone: (r) => (r.n === top ? 'ok' : 'bad'),
+  });
+}
+
+/** Retention is history, not a window, so it has its own request. */
+async function loadRetention() {
+  const body = $('retentionBody');
+  try {
+    const data = await api('/api/retention?days=365');
+    body.innerHTML = '';
+    if (!data.cohorts.length) return emptyRow(body, 5, 'No cohorts yet.');
+    for (const c of data.cohorts) {
+      const tr = el('tr');
+      tr.append(
+        td(c.cohort, 'mono', 'Cohort'),
+        td(fmt(c.size), 'num', 'Size'),
+        rateCell(c.week1, c.size, 'Week 1'),
+        rateCell(c.week2, c.size, 'Week 2'),
+        rateCell(c.week4, c.size, 'Week 4'),
+      );
+      body.appendChild(tr);
+    }
+  } catch (error) {
+    body.innerHTML = '';
+    emptyRow(body, 5, `Could not load retention (${error.message}).`);
+  }
+}
 const barColor = (tone) =>
   ({ ok: 'var(--ls-ac)', warn: 'var(--ls-ink3)', bad: 'var(--ls-ink)' }[tone] || 'var(--ls-ink)');
 
@@ -483,7 +525,7 @@ const TILE_DEFS = [
   ['pushes', 'Solutions pushed'], ['problems', 'Distinct problems'], ['failures', 'Failed pushes'],
 ];
 
-function paintTiles(targets, counts) {
+function paintTiles(targets, counts, deltas = {}) {
   const host = $('tiles');
   const maxTile = Math.max(1, ...TILE_DEFS.map(([k]) => targets[k] || 0));
   if (host.children.length !== TILE_DEFS.length) {
@@ -493,7 +535,8 @@ function paintTiles(targets, counts) {
       tile.dataset.tilt = '1';
       const spark = el('div', 'tile-spark');
       spark.appendChild(el('span'));
-      tile.append(el('div', 'tile-corner'), el('div', 'tile-value'), spark, el('div', 'tile-label', label));
+      tile.append(el('div', 'tile-corner'), el('div', 'tile-value'), spark,
+        el('div', 'tile-label', label), el('div', 'tile-delta'));
       host.appendChild(tile);
     }
     bindTilt();
@@ -506,13 +549,64 @@ function paintTiles(targets, counts) {
       : fmt(Math.round(live));
     tile.querySelector('.tile-spark span').style.width =
       `${k === 'accept' ? Math.min(100, targets.accept || 0) : ((targets[k] || 0) / maxTile) * 100}%`;
+
+    const delta = tile.querySelector('.tile-delta');
+    const change = deltas[k];
+    delta.className = 'tile-delta';
+    if (!change) { delta.textContent = ''; return; }
+    delta.textContent = change.text;
+    if (change.dir) delta.classList.add(change.dir);
   });
+}
+
+/**
+ * Each tile against the window immediately before it.
+ *
+ * Returns nothing at all when there is no previous window to compare with —
+ * showing "+100%" for the first period anyone uses the dashboard would be
+ * arithmetically true and completely meaningless.
+ */
+function computeDeltas(data) {
+  const prev = data.previous || {};
+  const hadPrevious = (prev.events || 0) > 0;
+  if (!hadPrevious) return {};
+
+  const prevAccept = pct(prev.accepted || 0, prev.submissions || 0);
+  const now = tileTargets(data);
+  const before = {
+    installs: prev.installs || 0,
+    subs: prev.submissions || 0,
+    accept: prevAccept,
+    pushes: prev.pushes || 0,
+    failures: prev.failures || 0,
+  };
+
+  const out = {};
+  for (const [k] of TILE_DEFS) {
+    if (before[k] === undefined) continue;          // problems has no previous
+    const was = before[k], is = now[k] || 0;
+    if (k === 'accept') {
+      const pts = is - was;
+      if (Math.abs(pts) < 0.05) { out[k] = { text: 'no change', dir: '' }; continue; }
+      out[k] = { text: `${pts > 0 ? '+' : ''}${pts.toFixed(1)} pts`, dir: pts > 0 ? 'up' : 'down' };
+      continue;
+    }
+    if (!was) { out[k] = { text: is ? 'new' : 'no change', dir: is ? 'up' : '' }; continue; }
+    const change = ((is - was) / was) * 100;
+    if (Math.abs(change) < 0.5) { out[k] = { text: 'no change', dir: '' }; continue; }
+    out[k] = {
+      text: `${change > 0 ? '+' : ''}${change.toFixed(0)}% vs prev`,
+      dir: change > 0 ? 'up' : 'down',
+    };
+  }
+  return out;
 }
 
 /** Tiles count up from zero on load, easing out. */
 function countUp(su) {
   const targets = tileTargets(su);
-  if (reduced()) { paintTiles(targets, targets); return; }
+  const deltas = computeDeltas(su);
+  if (reduced()) { paintTiles(targets, targets, deltas); return; }
   if (countRaf) cancelAnimationFrame(countRaf);
   const t0 = performance.now(), dur = 950;
   const step = (now) => {
@@ -520,7 +614,7 @@ function countUp(su) {
     const e = 1 - Math.pow(1 - p, 3);
     const counts = {};
     for (const k in targets) counts[k] = targets[k] * e;
-    paintTiles(targets, counts);
+    paintTiles(targets, counts, deltas);
     if (p < 1) countRaf = requestAnimationFrame(step);
   };
   countRaf = requestAnimationFrame(step);
@@ -559,8 +653,10 @@ function renderSummary(data) {
     bars(holder, data[field], { label, value, tone });
   }
 
+  funnelChart(data.funnel);
   perfTable(data.perf);
   problemsTable(data.problems);
+  loadRetention();
 
   $('footNote').textContent = `Updated ${fmtWhen(data.generatedAt)} · last ${data.days} days`;
 }
@@ -602,6 +698,9 @@ function problemsTable(rows) {
     link.rel = 'noopener noreferrer';
     title.appendChild(link);
 
+    const open = el('td', 'open', '↗');
+    open.title = 'Open this problem';
+
     tr.append(
       td(i + 1, 'rank'),
       title,
@@ -611,7 +710,15 @@ function problemsTable(rows) {
       rateCell(row.accepted, row.attempts, 'Rate'),
       td(fmt(row.pushes), 'num', 'Pushes'),
       td(fmt(row.installs), 'num', 'Users'),
+      open,
     );
+    // The title is a link out to LeetCode, so the row opens the drawer and
+    // the link keeps its own job.
+    tr.classList.add('row-link');
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      openProblem(row.slug);
+    });
     body.appendChild(tr);
   });
 }
@@ -885,6 +992,78 @@ async function openUser(installId) {
       return tr;
     },
     'Nothing recorded.'));
+}
+
+async function openProblem(slug) {
+  const body = openDrawer(slug, 'Problem');
+  let data;
+  try {
+    data = await api(`/api/problem?slug=${encodeURIComponent(slug)}&days=${days}`);
+  } catch (error) {
+    body.innerHTML = '';
+    body.appendChild(el('div', 'empty', `Could not load this problem (${error.message}).`));
+    return;
+  }
+
+  body.innerHTML = '';
+  const t = data.totals;
+  $('drawerTitle').textContent = t.title || slug;
+  $('drawerId').textContent = slug;
+
+  body.appendChild(drawerTiles([
+    [fmt(t.attempts), 'Attempts'],
+    [pctText(t.accepted, t.attempts), 'Acceptance'],
+    [fmt(t.pushes), 'Pushed'],
+    [fmt(t.installs), 'Users'],
+  ]));
+
+  body.appendChild(el('h3', null, 'Profile'));
+  const kv = el('div', 'kv');
+  for (const [k, v] of [
+    ['Difficulty', t.difficulty || 'Unknown'],
+    ['Avg runtime', fmtMs(t.avg_runtime)],
+    ['Avg memory', fmtKb(t.avg_memory)],
+  ]) {
+    const row = el('div', 'kv-row');
+    row.append(el('span', 'k', k), el('span', 'v', v));
+    kv.appendChild(row);
+  }
+  body.appendChild(kv);
+
+  if (data.statuses.length) {
+    body.appendChild(el('h3', null, 'Verdicts'));
+    const host = el('div', 'bars');
+    body.appendChild(host);
+    bars(host, data.statuses, {
+      label: (r) => r.status, value: (r) => r.n, tone: (r) => VERDICT_TONE[r.status] || 'warn',
+    });
+  }
+
+  if (data.languages.length) {
+    body.appendChild(el('h3', null, 'Languages'));
+    const host = el('div', 'bars');
+    body.appendChild(host);
+    bars(host, data.languages, { label: (r) => r.language, value: (r) => r.n });
+  }
+
+  body.appendChild(drawerSection('Who attempted it', String(data.installs.length)));
+  body.appendChild(drawerTable(
+    ['User', 'Attempts', 'Accepted', 'Last seen'],
+    data.installs,
+    (row) => {
+      const tr = el('tr', 'row-link');
+      const who = whoCell(row);
+      who.dataset.span = '1';
+      tr.append(
+        who,
+        td(fmt(row.attempts), 'num', 'Attempts'),
+        td(fmt(row.accepted), 'num', 'Accepted'),
+        td(fmtWhen(row.last_ts), 'soft', 'Last seen'),
+      );
+      tr.addEventListener('click', () => openUser(row.install_id));
+      return tr;
+    },
+    'Nobody has attempted it.'));
 }
 
 async function openDay(date) {

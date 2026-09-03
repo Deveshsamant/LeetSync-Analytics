@@ -80,6 +80,32 @@
 
       <div class="grid" id="barPanels"></div>
 
+      <div class="grid">
+        <section>
+          <div class="section-head" style="margin-bottom:18px">
+            <h2 class="h-label">Setup funnel</h2>
+            <span class="note">installs reaching each stage</span>
+          </div>
+          <div id="funnelChart" class="bars"></div>
+        </section>
+
+        <section>
+          <div class="section-head" style="margin-bottom:18px">
+            <h2 class="h-label">Weekly retention</h2>
+            <span class="note">all time</span>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl cardtable">
+              <thead>
+                <tr><th>Cohort</th><th class="num">Size</th><th>Week 1</th>
+                    <th>Week 2</th><th>Week 4</th></tr>
+              </thead>
+              <tbody id="retentionBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
       <section class="section">
         <div class="section-head">
           <h2 class="h-label">Accepted solutions by difficulty</h2>
@@ -106,7 +132,7 @@
             <thead>
               <tr><th>#</th><th>Problem</th><th>Level</th><th class="num">Attempts</th>
                   <th class="num">Accepted</th><th>Rate</th><th class="num">Pushes</th>
-                  <th class="num">Users</th></tr>
+                  <th class="num">Users</th><th></th></tr>
             </thead>
             <tbody id="problemsBody"></tbody>
           </table>

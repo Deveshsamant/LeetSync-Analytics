@@ -289,6 +289,15 @@ a:hover { color: var(--ls-ac-7); }
   transition: width .9s cubic-bezier(.2, .9, .2, 1);
 }
 .tile-label { font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ls-ink2); }
+.tile-delta {
+  margin-top: 6px;
+  font-family: var(--ls-mono);
+  font-size: 10px;
+  letter-spacing: .04em;
+  color: var(--ls-ink3);
+}
+.tile-delta.up { color: var(--ls-ac); }
+.tile-delta.down { color: var(--ls-ink2); }
 
 /* ── Panels ── */
 .section {
