@@ -13,11 +13,10 @@
 <body>
 
   <!-- ═══ KEY GATE ═══
-       The Worker rejects every read without the key, so this is the actual
-       protection, not just a screen. The canvas behind it is the same 3D
-       stage the overview uses, seeded with a spiral of towers. -->
+       Skipped entirely when AUTO_KEY is set in dashboard.js. Otherwise the
+       Worker rejects every read without the key, so this is the actual
+       protection, not just a screen. -->
   <div class="gate" id="gate">
-    <canvas class="gate-canvas" id="gateCanvas"></canvas>
     <form class="gate-card" id="gateForm">
       <img class="gate-logo" src="logo.png" alt="" width="52" height="52">
       <h1>LeetSync<br>Analytics</h1>

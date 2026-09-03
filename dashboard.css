@@ -619,7 +619,6 @@ a:hover { color: var(--ls-ac-7); }
   overflow: hidden;
   animation: lsFade .3s ease both;
 }
-.gate-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
 .gate-card {
   position: relative;
   z-index: 2;

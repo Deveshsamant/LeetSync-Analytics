@@ -1,9 +1,10 @@
 /* ============================================================
    dashboard.js — LeetSync Analytics, Modernist.
 
-   Ported from the Claude Design project of the same name: the same 3D
-   canvas stage, the same tilt behaviour, the same layered chart and the
-   same motion, rebuilt on plain DOM instead of the design runtime.
+   Ported from the Claude Design project of the same name: the same tilt
+   behaviour, the same layered chart and the same motion, rebuilt on plain
+   DOM instead of the design runtime. Both of the design's 3D canvas stages
+   were dropped at the author's request.
 
    One deliberate difference: the design shipped a sample-data generator so
    its preview had something to draw. That is not here. Every figure comes
@@ -17,6 +18,24 @@
 const ENDPOINT = 'https://leetsync-analytics.devsamant1744.workers.dev';
 const KEY_STORE = 'leetsync.dashboardKey';
 const THEME_STORE = 'leetsync.dashboardTheme';
+
+/**
+ * Paste the dashboard key here to skip the key screen — the page then
+ * unlocks itself on load.
+ *
+ * Understand what that costs. The key is the ONLY thing between this page and
+ * the whole dataset, and a key written here ships inside a file any visitor
+ * can read with View Source. With it set, anyone who reaches the URL sees
+ * every install, every problem and every shared solution.
+ *
+ * So only set it on a deployment that is itself protected. On Vercel that is
+ * Project -> Settings -> Deployment Protection, which puts your own login in
+ * front of the whole site; then this is convenience on top of real auth
+ * rather than a replacement for it.
+ *
+ * Leave it '' to keep the key screen.
+ */
+const AUTO_KEY = '';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Number(n || 0).toLocaleString();
@@ -125,168 +144,6 @@ function emptyRow(body, span, text) {
   body.appendChild(tr);
 }
 
-// ── 3D renderer ──────────────────────────────────────────────
-// Boxes on a ground grid, painter-sorted by depth, with per-face shading.
-// Drag to orbit; it drifts on its own when idle. Used by the key gate.
-
-function hexToRgb(h) {
-  const s = (h || '').trim().replace('#', '');
-  if (s.length === 3) return [parseInt(s[0] + s[0], 16), parseInt(s[1] + s[1], 16), parseInt(s[2] + s[2], 16)];
-  if (s.length >= 6) return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)];
-  return [32, 30, 29];
-}
-const mix = (a, b, t) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
-
-function mountStage(canvas, opts) {
-  const ctx = canvas.getContext('2d');
-  let rotY = opts.rotY, tiltX = opts.tiltX, spin = opts.spin;
-  let drag = null, raf = 0, alive = true;
-  const t0 = performance.now();
-  let cells = opts.cells();
-
-  const resize = () => {
-    const r = canvas.getBoundingClientRect();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.max(1, Math.round(r.width * dpr));
-    canvas.height = Math.max(1, Math.round(r.height * dpr));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  };
-
-  const project = (x, y, z, w, h, scale) => {
-    const c = Math.cos(rotY), s = Math.sin(rotY);
-    const X = x * c - z * s, Z = x * s + z * c;
-    const cx = Math.cos(tiltX), sx = Math.sin(tiltX);
-    const Y = y * cx - Z * sx, Z2 = y * sx + Z * cx;
-    const k = 11 / (11 + Z2 + 4.5);
-    return { x: w / 2 + X * k * scale, y: h * opts.horizon - Y * k * scale, z: Z2, k };
-  };
-
-  const frame = (now) => {
-    if (!alive) return;
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    if (!w || !h) { raf = requestAnimationFrame(frame); return; }
-    const cs = getComputedStyle(document.documentElement);
-    const ink = hexToRgb(cs.getPropertyValue('--ls-ink').trim() || '#201e1d');
-    const ground = hexToRgb(cs.getPropertyValue('--ls-g').trim() || '#f3f2f2');
-    const accent = hexToRgb(cs.getPropertyValue('--ls-ac').trim() || '#ec3013');
-    const time = (now - t0) / 1000;
-    if (spin && !drag) rotY += 0.0032;
-
-    ctx.clearRect(0, 0, w, h);
-    const scale = Math.min(w, h) * opts.scale;
-
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = mix(ground, ink, 0.22);
-    const G = opts.grid;
-    for (let i = -G; i <= G; i++) {
-      const a = project(i * 0.5, 0, -G * 0.5, w, h, scale);
-      const b = project(i * 0.5, 0, G * 0.5, w, h, scale);
-      const c = project(-G * 0.5, 0, i * 0.5, w, h, scale);
-      const d = project(G * 0.5, 0, i * 0.5, w, h, scale);
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke();
-    }
-
-    const drawn = cells.map((c) => {
-      const hh = Math.max(0.04, c.h * (1 + (opts.breathe ? 0.05 * Math.sin(time * 1.4 + c.x * 2 + c.z * 1.3) : 0)));
-      const s = c.s;
-      const P = [
-        project(c.x - s, 0, c.z - s, w, h, scale), project(c.x + s, 0, c.z - s, w, h, scale),
-        project(c.x + s, 0, c.z + s, w, h, scale), project(c.x - s, 0, c.z + s, w, h, scale),
-        project(c.x - s, hh, c.z - s, w, h, scale), project(c.x + s, hh, c.z - s, w, h, scale),
-        project(c.x + s, hh, c.z + s, w, h, scale), project(c.x - s, hh, c.z + s, w, h, scale),
-      ];
-      const depth = P.reduce((a, p) => a + p.z, 0) / 8;
-      return { P, depth, c, hh };
-    }).sort((a, b) => b.depth - a.depth);
-
-    for (const box of drawn) {
-      const { P, c, hh } = box;
-      const faces = [
-        { pts: [0, 1, 5, 4], shade: 0.14 }, { pts: [1, 2, 6, 5], shade: 0.30 },
-        { pts: [2, 3, 7, 6], shade: 0.14 }, { pts: [3, 0, 4, 7], shade: 0.30 },
-      ].map((f) => {
-        const pts = f.pts.map((i) => P[i]);
-        // Signed area tells us which faces point at the camera; the rest are
-        // dropped instead of being overdrawn.
-        const area = pts.reduce((a, p, i) => {
-          const q = pts[(i + 1) % pts.length];
-          return a + (p.x * q.y - q.x * p.y);
-        }, 0);
-        return { pts, shade: f.shade, front: area < 0, depth: pts.reduce((a, p) => a + p.z, 0) / 4 };
-      }).filter((f) => f.front).sort((a, b) => b.depth - a.depth);
-
-      const hot = c.h >= opts.hot;
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = mix(ink, ground, 0.05);
-      for (const f of faces) {
-        ctx.beginPath();
-        f.pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-        ctx.closePath();
-        ctx.fillStyle = hot ? mix(accent, ink, f.shade * 1.5) : mix(ground, ink, f.shade);
-        ctx.fill(); ctx.stroke();
-      }
-      ctx.beginPath();
-      [4, 5, 6, 7].forEach((i, n) => (n ? ctx.lineTo(P[i].x, P[i].y) : ctx.moveTo(P[i].x, P[i].y)));
-      ctx.closePath();
-      ctx.fillStyle = hot ? `rgb(${accent.join(',')})` : mix(ground, accent, Math.min(0.85, hh / opts.tall));
-      ctx.fill(); ctx.stroke();
-    }
-    raf = requestAnimationFrame(frame);
-  };
-
-  const down = (e) => {
-    drag = { x: e.clientX, y: e.clientY, rotY, tiltX };
-    canvas.style.cursor = 'grabbing';
-    canvas.setPointerCapture(e.pointerId);
-  };
-  const move = (e) => {
-    if (!drag) return;
-    rotY = drag.rotY + (e.clientX - drag.x) * 0.007;
-    tiltX = Math.max(0.12, Math.min(1.35, drag.tiltX - (e.clientY - drag.y) * 0.005));
-  };
-  const up = () => { drag = null; canvas.style.cursor = 'grab'; };
-
-  canvas.addEventListener('pointerdown', down);
-  canvas.addEventListener('pointermove', move);
-  canvas.addEventListener('pointerup', up);
-  canvas.addEventListener('pointercancel', up);
-  const ro = new ResizeObserver(resize);
-  ro.observe(canvas);
-  resize();
-  raf = requestAnimationFrame(frame);
-
-  return {
-    update(next) { cells = next; },
-    destroy() { alive = false; cancelAnimationFrame(raf); ro.disconnect(); },
-  };
-}
-
-let gateStage = null;
-
-function towerCells() {
-  const cells = [];
-  for (let i = 0; i < 9; i++) {
-    const a = i * 0.7;
-    cells.push({ x: Math.cos(a) * (0.35 + i * 0.11), z: Math.sin(a) * (0.35 + i * 0.11), s: 0.2, h: 0.35 + i * 0.28 });
-  }
-  return cells;
-}
-
-function mountStages() {
-  const spin = !reduced();
-  try {
-    if (!gateStage && $('gateCanvas') && !$('gate').hidden) {
-      gateStage = mountStage($('gateCanvas'), {
-        cells: towerCells, rotY: 0.4, tiltX: 0.5, spin,
-        grid: 9, scale: 0.3, horizon: 0.78, hot: 2.4, tall: 3, breathe: !reduced(),
-      });
-    }
-  } catch (err) {
-    console.error('[LeetSync] 3D stage failed to mount:', err && err.message, err);
-  }
-}
-
 /** Pointer-tracked tilt on the overview tiles. */
 function bindTilt() {
   if (reduced()) return;
@@ -364,13 +221,18 @@ $('gateForm').addEventListener('submit', async (event) => {
 function unlock(data) {
   $('gate').hidden = true;
   $('app').hidden = false;
-  if (gateStage) { gateStage.destroy(); gateStage = null; }
   renderSummary(data);
-  mountStages();
 }
 
 $('lockBtn').addEventListener('click', () => {
   try { localStorage.removeItem(KEY_STORE); } catch { /* ignore */ }
+  if (AUTO_KEY) {
+    // Reloading would unlock straight back off AUTO_KEY, so the button would
+    // look broken. Say what actually has to change instead.
+    $('footNote').textContent =
+      'Auto-unlock is on — clear AUTO_KEY in dashboard.js to require the key.';
+    return;
+  }
   location.reload();
 });
 
@@ -1148,19 +1010,21 @@ document.addEventListener('keydown', (event) => {
 // ── Boot ─────────────────────────────────────────────────────
 
 buildNav();
-mountStages();
 
 (async function init() {
   let stored = null;
   try { stored = localStorage.getItem(KEY_STORE); } catch { /* private mode */ }
-  if (!stored) return;                       // show the gate
+
+  const candidate = AUTO_KEY || stored;
+  if (!candidate) return;                    // show the gate
 
   try {
-    const data = await api(`/api/summary?days=${days}`, stored);
-    key = stored;
+    const data = await api(`/api/summary?days=${days}`, candidate);
+    key = candidate;
     unlock(data);
   } catch {
     // Stale or rejected key: fall back to the gate rather than a blank page.
+    // Only a browser-stored key is cleared; AUTO_KEY lives in the source.
     try { localStorage.removeItem(KEY_STORE); } catch { /* ignore */ }
   }
 }());
