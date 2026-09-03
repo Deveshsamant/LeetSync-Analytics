@@ -173,7 +173,7 @@ $('views').addEventListener('click', (event) => {
     c.classList.toggle('active', on);
     c.setAttribute('aria-selected', on ? 'true' : 'false');
   }
-  for (const id of ['overview', 'users', 'activity']) {
+  for (const id of ['overview', 'days', 'users', 'activity']) {
     $(`view-${id}`).hidden = id !== view;
   }
   loadView();
@@ -194,6 +194,7 @@ async function loadView() {
   $('refreshBtn').textContent = 'Loading…';
   try {
     if (view === 'overview') renderSummary(await api(`/api/summary?days=${days}`));
+    else if (view === 'days') renderDays(await api(`/api/summary?days=${days}`));
     else if (view === 'users') renderUsers(await api(`/api/users?days=${days}`));
     else renderActivity(await api(`/api/activity?days=${days}&limit=500`));
   } catch (error) {
@@ -295,6 +296,13 @@ function activityChart(daily) {
     <path d="${acceptedLine}" fill="none" stroke="${violet}" stroke-width="1.8" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>
     ${dots}${labels}
   </svg>`;
+
+  // A point on the chart is the same thing as a row in the Days table, so it
+  // opens the same detail.
+  host.querySelectorAll('circle').forEach((dot, i) => {
+    dot.style.cursor = 'pointer';
+    dot.addEventListener('click', () => openDay(daily[i].day));
+  });
 }
 
 // ── Overview ─────────────────────────────────────────────────
@@ -450,6 +458,215 @@ function renderUsers(data) {
 
   $('footNote').textContent =
     `Updated ${new Date(data.generatedAt).toLocaleString()} · last ${data.days} days`;
+}
+
+// ── Days ─────────────────────────────────────────────────
+
+/** A UTC day string (YYYY-MM-DD) shown the way a reader expects to see it. */
+function dayLabel(day) {
+  const [y, m, d] = String(day).split('-').map(Number);
+  if (!y || !m || !d) return String(day);
+  // Built and formatted in UTC, so the label can never slide a day against
+  // the bucket the Worker grouped by.
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, {
+    timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric',
+  });
+}
+
+function renderDays(data) {
+  const rows = [...data.daily].reverse();          // newest first
+  const body = $('daysBody');
+  body.innerHTML = '';
+  $('daysNote').textContent = rows.length
+    ? `${rows.length} day${rows.length === 1 ? '' : 's'} with activity \u00b7 UTC \u00b7 click a row for detail`
+    : 'UTC days';
+
+  if (!rows.length) return emptyRow(body, 10, 'No activity in this range.');
+
+  const peak = Math.max(...rows.map(r => r.events), 1);
+
+  for (const row of rows) {
+    const tr = el('tr', 'row-link');
+    tr.tabIndex = 0;
+
+    const label = el('td');
+    label.appendChild(el('span', null, dayLabel(row.day)));
+    label.title = row.day;
+
+    // Proportional bar, so busy days stand out without reading the numbers.
+    const spark = el('td');
+    const track = el('span', 'bar-track');
+    track.style.display = 'block';
+    track.style.minWidth = '90px';
+    const fill = el('span', 'bar-fill');
+    fill.style.width = `${(row.events / peak) * 100}%`;
+    track.appendChild(fill);
+    spark.appendChild(track);
+
+    tr.append(
+      label,
+      spark,
+      td(fmt(row.installs), 'num'),
+      td(fmt(row.events), 'num'),
+      td(fmt(row.submissions), 'num'),
+      td(fmt(row.accepted), 'num'),
+      rateCell(row.accepted, row.submissions),
+      td(fmt(row.pushes), 'num'),
+      td(fmt(row.failures), 'num'),
+      td(fmt(row.problems), 'num'),
+    );
+
+    const open = () => openDay(row.day);
+    tr.addEventListener('click', open);
+    tr.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    body.appendChild(tr);
+  }
+
+  $('footNote').textContent =
+    `Updated ${new Date(data.generatedAt).toLocaleString()} \u00b7 last ${data.days} days`;
+}
+
+/** Build a titled panel shell for the drawer. */
+function drawerPanel(title, note) {
+  const section = el('section', 'panel');
+  const head = el('div', 'panel-head');
+  head.appendChild(el('h2', null, title));
+  if (note !== undefined && note !== null) head.appendChild(el('span', 'panel-note', note));
+  section.appendChild(head);
+  return section;
+}
+
+/** A bars panel whose host id is unique enough to hand to bars(). */
+function drawerBars(title, note, hostId, rows, opts) {
+  const section = drawerPanel(title, note);
+  const host = el('div', 'bars');
+  host.id = hostId;
+  section.appendChild(host);
+  return { section, paint: () => bars(hostId, rows, opts) };
+}
+
+/** A small table built from plain rows. */
+function drawerTable(headers, rows, buildRow, emptyText) {
+  const wrap = el('div', 'table-wrap');
+  const table = el('table', 'table');
+  const thead = el('thead');
+  const hr = el('tr');
+  for (const h of headers) hr.appendChild(el('th', null, h));
+  thead.appendChild(hr);
+  const tbody = el('tbody');
+  if (!rows.length) emptyRow(tbody, headers.length, emptyText);
+  for (const row of rows) tbody.appendChild(buildRow(row));
+  table.append(thead, tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/** One day, opened in the shared drawer. */
+async function openDay(date) {
+  $('drawer').hidden = false;
+  $('drawerTitle').textContent = dayLabel(date);
+  $('drawerId').textContent = `${date} \u00b7 UTC`;
+  const body = $('drawerBody');
+  body.innerHTML = '';
+  body.appendChild(el('div', 'empty', 'Loading\u2026'));
+
+  let data;
+  try {
+    data = await api(`/api/day?date=${encodeURIComponent(date)}`);
+  } catch (error) {
+    body.innerHTML = '';
+    body.appendChild(el('div', 'empty', `Could not load this day (${error.message}).`));
+    return;
+  }
+
+  body.innerHTML = '';
+  const t = data.totals;
+
+  const tiles = el('div', 'tiles');
+  const tile = (value, label) => {
+    const node = el('div', 'tile');
+    node.append(el('div', 'tile-value', value), el('div', 'tile-label', label));
+    return node;
+  };
+  tiles.append(
+    tile(fmt(t.installs), 'Active installs'),
+    tile(fmt(t.submissions), 'Submissions'),
+    tile(pctText(t.accepted, t.submissions), 'Acceptance'),
+    tile(fmt(t.pushes), 'Pushed'),
+  );
+  body.appendChild(tiles);
+
+  // Hour of day, so a single day is legible on its own timeline. Every hour
+  // is present, including the quiet ones, or the gaps would read as missing
+  // data rather than as nothing happening.
+  const hours = [];
+  for (let h = 0; h < 24; h++) {
+    const key = String(h).padStart(2, '0');
+    const found = data.hourly.find(r => r.hour === key);
+    hours.push({ hour: `${key}:00`, n: found ? found.n : 0 });
+  }
+  const hourPanel = drawerBars('By hour', 'UTC', 'dayHours',
+    hours.some(r => r.n) ? hours : [], { label: r => r.hour, value: r => r.n });
+  body.appendChild(hourPanel.section);
+  hourPanel.paint();
+
+  if (data.statuses.length) {
+    const p = drawerBars('Verdicts', null, 'dayStatuses', data.statuses,
+      { label: r => r.status, value: r => r.n, colour: r => VERDICT_COLOUR[r.status] });
+    body.appendChild(p.section);
+    p.paint();
+  }
+
+  if (data.languages.length) {
+    const p = drawerBars('Languages', null, 'dayLangs', data.languages,
+      { label: r => r.language, value: r => r.n });
+    body.appendChild(p.section);
+    p.paint();
+  }
+
+  const probs = drawerPanel('Problems', String(data.problems.length));
+  probs.appendChild(drawerTable(
+    ['Problem', 'Level', 'Attempts', 'Accepted', 'Pushes'],
+    data.problems,
+    (row) => {
+      const tr = el('tr');
+      tr.append(
+        td(row.title || row.slug),
+        levelCell(row.difficulty),
+        td(fmt(row.attempts), 'num'),
+        td(fmt(row.accepted), 'num'),
+        td(fmt(row.pushes), 'num'),
+      );
+      return tr;
+    },
+    'No problems attempted.'));
+  body.appendChild(probs);
+
+  const who = drawerPanel('Installs active', String(data.installs.length));
+  who.appendChild(drawerTable(
+    ['Install', 'Events', 'Subs', 'Accepted', 'Pushes', 'First', 'Last'],
+    data.installs,
+    (row) => {
+      const tr = el('tr', 'row-link');
+      const idCell = el('td');
+      idCell.appendChild(el('span', 'mono', shortId(row.install_id)));
+      idCell.title = row.install_id;
+      tr.append(
+        idCell,
+        td(fmt(row.events), 'num'),
+        td(fmt(row.submissions), 'num'),
+        td(fmt(row.accepted), 'num'),
+        td(fmt(row.pushes), 'num'),
+        td(new Date(row.first_ts).toLocaleTimeString()),
+        td(new Date(row.last_ts).toLocaleTimeString()),
+      );
+      tr.addEventListener('click', () => openUser(row.install_id));
+      return tr;
+    },
+    'Nobody was active.'));
+  body.appendChild(who);
 }
 
 // ── Per-install drawer ───────────────────────────────────────

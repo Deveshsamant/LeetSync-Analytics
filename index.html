@@ -37,6 +37,7 @@
 
       <nav class="views" id="views" role="tablist" aria-label="Dashboard views">
         <button class="chip active" role="tab" aria-selected="true" data-view="overview">Overview</button>
+        <button class="chip" role="tab" aria-selected="false" data-view="days">Days</button>
         <button class="chip" role="tab" aria-selected="false" data-view="users">Users</button>
         <button class="chip" role="tab" aria-selected="false" data-view="activity">Activity</button>
       </nav>
@@ -166,6 +167,27 @@
                   <th class="num">Users</th><th></th></tr>
             </thead>
             <tbody id="problemsBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- ══ Days ══ -->
+    <section class="view" id="view-days" hidden>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Day by day</h2>
+          <span class="panel-note" id="daysNote"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Day</th><th></th><th class="num">Installs</th><th class="num">Events</th>
+                  <th class="num">Subs</th><th class="num">Accepted</th><th>Rate</th>
+                  <th class="num">Pushes</th><th class="num">Failed</th>
+                  <th class="num">Problems</th></tr>
+            </thead>
+            <tbody id="daysBody"></tbody>
           </table>
         </div>
       </section>
