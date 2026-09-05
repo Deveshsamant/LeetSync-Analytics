@@ -388,53 +388,160 @@ a:hover { color: var(--ls-ac-7); }
 .empty { padding: 18px 0; font-size: 12px; color: var(--ls-ink3); }
 
 /* ── Broadcast ─────────────────────────────────────────────── */
-.bc-live {
-  border: var(--bw) solid var(--ac);
-  background: var(--ac-soft);
-  padding: 16px 18px;
-  margin-bottom: 22px;
+/* Uses the same ink border, hard shadow and press-to-flatten as every other
+   control here. The first version of this block reached for --bw and --bd,
+   which are the extension's token names and do not exist in this stylesheet —
+   so every rule silently resolved to nothing and the form rendered unstyled. */
+
+.bc-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 300px);
+  gap: 26px;
+  align-items: start;
 }
-.bc-live-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.bc-live-label { font-family: var(--f-mono); font-size: 10px; letter-spacing: .16em; color: var(--ac); }
-.bc-clear { background: none; border: 0; color: var(--tx3); font-family: var(--f-mono); font-size: 11px; cursor: pointer; }
-.bc-clear:hover { color: var(--ac); }
-.bc-live-title { font-weight: 700; margin-bottom: 4px; }
-.bc-live-msg { color: var(--tx2); white-space: pre-wrap; line-height: 1.5; }
-.bc-live-meta { margin-top: 8px; font-family: var(--f-mono); font-size: 11px; color: var(--tx4); }
+@media (max-width: 900px) {
+  .bc-wrap { grid-template-columns: minmax(0, 1fr); }
+}
 
 .bc-form { max-width: 620px; }
-.bc-label { display: block; font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--tx4); margin: 14px 0 6px; }
-.bc-opt { text-transform: none; letter-spacing: 0; opacity: .7; }
+
+.bc-label {
+  display: block;
+  font-family: var(--ls-mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ls-ink2);
+  margin: 18px 0 7px;
+}
+.bc-form > .bc-label:first-child { margin-top: 0; }
+.bc-opt { text-transform: none; letter-spacing: .02em; opacity: .65; }
+
 .bc-input {
   width: 100%;
   padding: 10px 12px;
-  background: var(--card);
-  border: var(--bw) solid var(--bd);
-  color: var(--tx);
-  font-family: inherit;
+  font: inherit;
   font-size: 14px;
+  color: var(--ls-ink);
+  background: var(--ls-s);
+  border: 2px solid var(--ls-ink);
+  outline: none;
 }
-.bc-input:focus { outline: none; border-color: var(--ac); }
-.bc-area { resize: vertical; line-height: 1.5; }
-.bc-count { text-align: right; font-family: var(--f-mono); font-size: 11px; color: var(--tx4); margin-top: 4px; }
-.bc-row { display: flex; gap: 10px; margin-top: 16px; }
-.bc-select { width: auto; flex: none; }
+.bc-input::placeholder { color: var(--ls-ink2); opacity: .6; }
+.bc-input:focus {
+  border-color: var(--ls-ac);
+  box-shadow: calc(4px * var(--ls-d)) calc(4px * var(--ls-d)) 0 var(--ls-ac);
+}
+/* Four lines is the shape of the message people actually send; it can still be
+   dragged taller, but it no longer opens as half a page of empty box. */
+.bc-area { resize: vertical; min-height: 104px; line-height: 1.55; font-family: inherit; }
+
+.bc-count {
+  text-align: right;
+  font-family: var(--ls-mono);
+  font-size: 11px;
+  color: var(--ls-ink2);
+  margin-top: 6px;
+}
+.bc-count.over { color: var(--ls-ac); }
+
+.bc-row { display: flex; gap: 12px; margin-top: 22px; align-items: stretch; }
+.bc-select { width: auto; flex: none; cursor: pointer; }
 .bc-send {
   flex: 1;
-  padding: 10px 18px;
-  background: var(--ac);
-  color: var(--ac-ink);
-  border: 0;
-  font-family: inherit;
-  font-weight: 700;
-  font-size: 14px;
+  padding: 12px 16px;
+  font: inherit;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ls-ac-ink);
+  background: var(--ls-ac);
+  border: 2px solid var(--ls-ink);
   cursor: pointer;
+  box-shadow: calc(4px * var(--ls-d)) calc(4px * var(--ls-d)) 0 var(--ls-shade);
+  transition: transform .12s, box-shadow .12s, opacity .15s;
 }
-.bc-send:disabled { opacity: .55; cursor: not-allowed; }
-.bc-msg { margin-top: 12px; padding: 10px 12px; border: var(--bw) solid var(--bd); font-size: 13px; }
-.bc-msg.ok { border-color: var(--ac); color: var(--ac); }
-.bc-msg.bad { border-color: var(--bad); color: var(--bad); }
+.bc-send:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: calc(6px * var(--ls-d)) calc(6px * var(--ls-d)) 0 var(--ls-shade);
+}
+.bc-send:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: 0 0 0 var(--ls-shade); }
+.bc-send:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+
+.bc-msg {
+  margin-top: 14px;
+  padding: 11px 13px;
+  font-size: 13px;
+  border: 2px solid var(--ls-ink);
+  background: var(--ls-s);
+}
+.bc-msg.ok { border-color: var(--ls-ac); color: var(--ls-ac); }
+.bc-msg.bad { border-color: var(--ls-ink); color: var(--ls-ink); font-weight: 600; }
+
+/* What users are seeing right now, kept beside the composer rather than above
+   it — it is a status, not a step in writing the next one. */
+.bc-live {
+  border: 2px solid var(--ls-ink);
+  background: var(--ls-s);
+  padding: 16px 18px;
+  box-shadow: calc(4px * var(--ls-d)) calc(4px * var(--ls-d)) 0 var(--ls-shade);
+}
+.bc-live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.bc-live-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--ls-mono);
+  font-size: 10.5px;
+  letter-spacing: .14em;
+  color: var(--ls-ac);
+}
+.bc-live-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: var(--ls-ac);
+  animation: bcPulse 2.4s ease-in-out infinite;
+}
+@keyframes bcPulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+.bc-clear {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ls-ink2);
+  font-family: var(--ls-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.bc-clear:hover { color: var(--ls-ac); }
+.bc-live-title { font-family: var(--font-heading); font-weight: 800; margin-bottom: 5px; }
+.bc-live-msg { color: var(--ls-ink); white-space: pre-wrap; line-height: 1.55; font-size: 13.5px; }
+.bc-live-meta {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ls-hair);
+  font-family: var(--ls-mono);
+  font-size: 10.5px;
+  color: var(--ls-ink2);
+  word-break: break-word;
+}
+.bc-empty {
+  border: 2px dashed var(--ls-hair);
+  padding: 18px;
+  font-size: 13px;
+  color: var(--ls-ink2);
+  line-height: 1.55;
+}
 
 /* ── Tables ── */
 .tbl-wrap { overflow-x: auto; }

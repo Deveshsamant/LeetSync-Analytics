@@ -387,7 +387,13 @@ async function loadBroadcast() {
 
 function renderLive(note) {
   const box = $('bcLive');
-  if (!note) { box.hidden = true; return; }
+  const empty = $('bcEmpty');
+  if (!note) {
+    box.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+  empty.hidden = true;
   $('bcLiveTitle').textContent = note.title || 'A message from LeetSync';
   $('bcLiveMsg').textContent = note.message;
   $('bcLiveMeta').textContent =
@@ -436,7 +442,10 @@ async function postBroadcast(payload) {
 }
 
 $('bcMessage').addEventListener('input', () => {
-  $('bcCount').textContent = String($('bcMessage').value.length);
+  const used = $('bcMessage').value.length;
+  $('bcCount').textContent = String(used);
+  // maxlength already caps it; this just warns before the cap bites.
+  $('bcCount').parentElement.classList.toggle('over', used > 360);
 });
 
 $('bcForm').addEventListener('submit', async (event) => {
