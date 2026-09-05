@@ -178,6 +178,55 @@
     </section>
 
     <!-- ═══ ACTIVITY ═══ -->
+    <section class="view pad" id="view-broadcast" style="padding-top:26px;padding-bottom:26px" hidden>
+      <div class="page-head">
+        <h1 class="page-title">Broadcast</h1>
+        <span class="page-note" id="bcNote"></span>
+      </div>
+
+      <div class="bc-live" id="bcLive" hidden>
+        <div class="bc-live-head">
+          <span class="bc-live-label">LIVE NOW</span>
+          <button class="bc-clear" id="bcClear" type="button">Take it down</button>
+        </div>
+        <div class="bc-live-title" id="bcLiveTitle"></div>
+        <div class="bc-live-msg" id="bcLiveMsg"></div>
+        <div class="bc-live-meta" id="bcLiveMeta"></div>
+      </div>
+
+      <form class="bc-form" id="bcForm">
+        <label class="bc-label" for="bcTitle">Title <span class="bc-opt">optional</span></label>
+        <input class="bc-input" id="bcTitle" maxlength="80" placeholder="A message from LeetSync" autocomplete="off">
+
+        <label class="bc-label" for="bcMessage">Message</label>
+        <textarea class="bc-input bc-area" id="bcMessage" maxlength="400" rows="4"
+                  placeholder="Shown once, in a popup, the next time each user opens the extension."></textarea>
+        <div class="bc-count"><span id="bcCount">0</span>/400</div>
+
+        <label class="bc-label" for="bcUrl">Link <span class="bc-opt">optional, https only</span></label>
+        <input class="bc-input" id="bcUrl" maxlength="300" placeholder="https://leetsync-site.vercel.app/" autocomplete="off">
+
+        <div class="bc-row">
+          <select class="bc-input bc-select" id="bcType">
+            <option value="info">Info</option>
+            <option value="success">Good news</option>
+            <option value="warn">Warning</option>
+          </select>
+          <button class="bc-send" id="bcSend" type="submit">Send to everyone</button>
+        </div>
+        <div class="bc-msg" id="bcResult" hidden></div>
+      </form>
+
+      <div class="tbl-box" style="margin-top:22px">
+        <table class="tbl cardtable">
+          <thead>
+            <tr><th>Sent</th><th>Title</th><th>Message</th><th>Type</th><th>Status</th></tr>
+          </thead>
+          <tbody id="bcHistory"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="view pad" id="view-activity" style="padding-top:26px;padding-bottom:26px" hidden>
       <div class="page-head">
         <h1 class="page-title">Every event</h1>

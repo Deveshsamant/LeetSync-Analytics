@@ -295,7 +295,8 @@ $('lockBtn').addEventListener('click', () => {
 
 // ── Navigation ───────────────────────────────────────────────
 
-const VIEWS = [['overview', 'Overview'], ['days', 'Days'], ['users', 'Users'], ['activity', 'Activity']];
+const VIEWS = [['overview', 'Overview'], ['days', 'Days'], ['users', 'Users'],
+               ['activity', 'Activity'], ['broadcast', 'Broadcast']];
 const RANGES = [7, 30, 90, 365];
 
 function buildNav() {
@@ -352,6 +353,7 @@ async function loadView() {
     if (view === 'overview') renderSummary(await api(`/api/summary?days=${days}`));
     else if (view === 'days') renderDays(await api(`/api/summary?days=${days}`));
     else if (view === 'users') renderUsers(await api(`/api/users?days=${days}`));
+    else if (view === 'broadcast') await loadBroadcast();
     else renderActivity(await api(`/api/activity?days=${days}&limit=500`));
   } catch (error) {
     $('footNote').textContent = `Refresh failed: ${error.message}`;
@@ -359,6 +361,120 @@ async function loadView() {
     $('refreshLabel').textContent = 'Refresh';
   }
 }
+
+// ── Broadcast ────────────────────────────────────────────────
+//
+// One message live at a time. Sending replaces whatever was up, because two
+// at once would race for the same modal in the extension and the loser would
+// never be seen.
+
+const bcTime = (ts) => new Date(ts).toLocaleString();
+
+async function loadBroadcast() {
+  const [live, history] = await Promise.all([
+    // The live read is the same public endpoint the extension polls, so this
+    // shows exactly what users are being shown rather than a second opinion.
+    fetch(`${ENDPOINT}/announcement`).then(r => r.json()).catch(() => ({ announcement: null })),
+    api('/api/announcements?limit=20').catch(() => ({ rows: [] })),
+  ]);
+
+  renderLive(live.announcement);
+  renderBroadcastHistory(history.rows || []);
+  $('bcNote').textContent = live.announcement
+    ? 'One message is live.'
+    : 'Nothing is being shown to users right now.';
+}
+
+function renderLive(note) {
+  const box = $('bcLive');
+  if (!note) { box.hidden = true; return; }
+  $('bcLiveTitle').textContent = note.title || 'A message from LeetSync';
+  $('bcLiveMsg').textContent = note.message;
+  $('bcLiveMeta').textContent =
+    `${note.type} · sent ${bcTime(note.created_at)}${note.url ? ` · ${note.url}` : ''}`;
+  box.hidden = false;
+}
+
+function renderBroadcastHistory(rows) {
+  const body = $('bcHistory');
+  body.innerHTML = '';
+  if (!rows.length) {
+    const tr = el('tr');
+    const td = el('td', 'empty', 'Nothing sent yet.');
+    td.colSpan = 5;
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  for (const row of rows) {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'mono', bcTime(row.created_at)));
+    tr.appendChild(el('td', '', row.title || '—'));
+    tr.appendChild(el('td', '', row.message));
+    tr.appendChild(el('td', 'mono', row.type));
+    tr.appendChild(el('td', 'mono', row.active ? 'live' : 'ended'));
+    body.appendChild(tr);
+  }
+}
+
+function bcResult(text, ok) {
+  const box = $('bcResult');
+  box.textContent = text;
+  box.className = 'bc-msg ' + (ok ? 'ok' : 'bad');
+  box.hidden = false;
+}
+
+async function postBroadcast(payload) {
+  const res = await fetch(`${ENDPOINT}/api/announcement`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `worker returned ${res.status}`);
+  return body;
+}
+
+$('bcMessage').addEventListener('input', () => {
+  $('bcCount').textContent = String($('bcMessage').value.length);
+});
+
+$('bcForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const message = $('bcMessage').value.trim();
+  if (!message) { bcResult('Write a message first.', false); return; }
+
+  const send = $('bcSend');
+  send.disabled = true;
+  send.textContent = 'Sending…';
+  try {
+    await postBroadcast({
+      message,
+      title: $('bcTitle').value.trim() || null,
+      url: $('bcUrl').value.trim() || null,
+      type: $('bcType').value,
+    });
+    $('bcMessage').value = '';
+    $('bcCount').textContent = '0';
+    bcResult('Sent. Every user sees it once, next time they open the extension.', true);
+    await loadBroadcast();
+  } catch (error) {
+    bcResult(`Could not send: ${error.message}`, false);
+  } finally {
+    send.disabled = false;
+    send.textContent = 'Send to everyone';
+  }
+});
+
+$('bcClear').addEventListener('click', async () => {
+  try {
+    await postBroadcast({ clear: true });
+    bcResult('Taken down. Users who have not seen it never will.', true);
+    await loadBroadcast();
+  } catch (error) {
+    bcResult(`Could not take it down: ${error.message}`, false);
+  }
+});
 
 // ── Isometric bars ───────────────────────────────────────────
 
