@@ -296,7 +296,8 @@ $('lockBtn').addEventListener('click', () => {
 // ── Navigation ───────────────────────────────────────────────
 
 const VIEWS = [['overview', 'Overview'], ['days', 'Days'], ['users', 'Users'],
-               ['activity', 'Activity'], ['broadcast', 'Broadcast']];
+               ['activity', 'Activity'], ['feedback', 'Feedback'],
+               ['broadcast', 'Broadcast']];
 const RANGES = [7, 30, 90, 365];
 
 function buildNav() {
@@ -353,12 +354,101 @@ async function loadView() {
     if (view === 'overview') renderSummary(await api(`/api/summary?days=${days}`));
     else if (view === 'days') renderDays(await api(`/api/summary?days=${days}`));
     else if (view === 'users') renderUsers(await api(`/api/users?days=${days}`));
+    else if (view === 'feedback') await loadFeedback();
     else if (view === 'broadcast') await loadBroadcast();
     else renderActivity(await api(`/api/activity?days=${days}&limit=500`));
   } catch (error) {
     $('footNote').textContent = `Refresh failed: ${error.message}`;
   } finally {
     $('refreshLabel').textContent = 'Refresh';
+  }
+}
+
+// ── Feedback ─────────────────────────────────────────────────
+//
+// The one table here written by users rather than by the extension, so it is
+// read rather than aggregated: a count of suggestions tells you nothing, the
+// sentences do.
+
+let fbFilter = 'all';
+let fbRows = [];
+
+async function loadFeedback() {
+  const data = await api('/api/feedback?limit=200');
+  fbRows = data.rows || [];
+  const open = fbRows.filter(r => !r.handled).length;
+  $('fbNote').textContent = fbRows.length
+    ? `${open} open of ${fbRows.length}`
+    : 'Nothing sent yet.';
+  renderFeedbackFilters(data.counts || []);
+  renderFeedback();
+}
+
+function renderFeedbackFilters(counts) {
+  const host = $('fbFilters');
+  host.innerHTML = '';
+  const total = fbRows.length;
+  const openTotal = fbRows.filter(r => !r.handled).length;
+  const options = [
+    ['all', `All · ${total}`],
+    ['open', `Open · ${openTotal}`],
+    ...['feedback', 'issue', 'suggestion'].map(k => {
+      const c = counts.find(x => x.kind === k);
+      return [k, `${k} · ${c ? c.n : 0}`];
+    }),
+  ];
+  for (const [id, label] of options) {
+    const btn = el('button', fbFilter === id ? 'on' : '', label);
+    btn.type = 'button';
+    btn.addEventListener('click', () => { fbFilter = id; renderFeedbackFilters(counts); renderFeedback(); });
+    host.appendChild(btn);
+  }
+}
+
+function renderFeedback() {
+  const host = $('fbList');
+  host.innerHTML = '';
+  const rows = fbRows.filter(r =>
+    fbFilter === 'all' ? true : fbFilter === 'open' ? !r.handled : r.kind === fbFilter);
+
+  if (!rows.length) {
+    host.appendChild(el('div', 'empty', 'Nothing here.'));
+    return;
+  }
+
+  for (const row of rows) {
+    const item = el('div', 'fb-item' + (row.handled ? ' done' : ''));
+
+    const head = el('div', 'fb-head');
+    head.appendChild(el('span', 'fb-kind ' + row.kind, row.kind));
+    head.appendChild(el('span', 'fb-who', row.display_name || (row.install_id || '').slice(0, 8) || 'anonymous'));
+    head.appendChild(el('span', 'fb-when', new Date(row.created_at).toLocaleString()));
+    item.appendChild(head);
+
+    item.appendChild(el('div', 'fb-msg', row.message));
+
+    const meta = el('div', 'fb-meta');
+    meta.appendChild(el('span', '', 'v' + (row.version || '?')));
+    meta.appendChild(el('span', '', row.install_id || 'no install id'));
+    const mark = el('button', 'fb-mark', row.handled ? 'Mark unhandled' : 'Mark handled');
+    mark.type = 'button';
+    mark.addEventListener('click', async () => {
+      mark.disabled = true;
+      try {
+        await fetch(`${ENDPOINT}/api/feedback`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify({ id: row.id, handled: !row.handled }),
+        });
+        await loadFeedback();
+      } finally {
+        mark.disabled = false;
+      }
+    });
+    meta.appendChild(mark);
+    item.appendChild(meta);
+
+    host.appendChild(item);
   }
 }
 
